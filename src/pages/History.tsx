@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, deleteDoc, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import HistoryRow from "../components/HistoryRow";
 import { db } from "../firebase";
 import { formatDate } from "../lib/format";
@@ -18,6 +18,7 @@ export default function History() {
   const { push } = useToast();
 
   useEffect(() => {
+    const fallback = setTimeout(() => setIsLoading(false), 3000);
     const q = query(collection(db, "sessions"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(
       q,
@@ -29,14 +30,35 @@ export default function History() {
           }))
         );
         setIsLoading(false);
+        clearTimeout(fallback);
       },
       () => {
         push("Failed to load history sessions.");
         setIsLoading(false);
+        clearTimeout(fallback);
       }
     );
-    return () => unsub();
+    return () => {
+      clearTimeout(fallback);
+      unsub();
+    };
   }, [push]);
+
+  const handleDelete = async (id: string, name: string) => {
+    const confirmText = prompt(
+      `Are you sure you want to delete this experiment? Type "experiment" to continue.\n\n${name}`
+    );
+    if (confirmText?.toLowerCase() !== "experiment") {
+      push("Failed to delete the experiment.");
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, "sessions", id));
+    } catch (error) {
+      console.error("Failed to delete session", error);
+      push("Failed to delete the experiment.");
+    }
+  };
 
   return (
     <div className="w-full">
@@ -56,6 +78,7 @@ export default function History() {
               id={session.id}
               name={session.name || "Experiment"}
               dateLabel={formatDate(session.createdAt)}
+              onDelete={handleDelete}
             />
           ))}
       </div>

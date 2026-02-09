@@ -24,10 +24,17 @@ body {
     #0b0b0b;
 }
 
+.title-gradient {
+  background: linear-gradient(180deg, #ffffff 0%, #cfcfcf 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 .glass-card {
   background: linear-gradient(145deg, rgba(60, 45, 40, 0.55), rgba(30, 22, 20, 0.75));
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 25px 40px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .pill-nav {

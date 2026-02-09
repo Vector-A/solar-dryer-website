@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+ï»¿import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   collection,
@@ -38,6 +38,7 @@ export default function SessionDetail() {
 
   useEffect(() => {
     if (!sessionId) return;
+    const fallback = setTimeout(() => setIsLoading(false), 3000);
     getDoc(doc(db, "sessions", sessionId))
       .then((snap) => {
         setSession((snap.data() as SessionData) || null);
@@ -60,20 +61,25 @@ export default function SessionDetail() {
           }))
         );
         setIsLoading(false);
+        clearTimeout(fallback);
       },
       () => {
         push("Failed to load session samples.");
         setIsLoading(false);
+        clearTimeout(fallback);
       }
     );
-    return () => unsub();
+    return () => {
+      clearTimeout(fallback);
+      unsub();
+    };
   }, [sessionId, push]);
 
   const headerDate = useMemo(() => formatDate(session?.createdAt), [session]);
 
   const handleDownload = () => {
     const rows = [
-      ["Dryer Temp (°C)", "Collector Temp (°C)", "Humidity (%)", "Timestamp"],
+      ["Dryer Temp (Â°C)", "Collector Temp (Â°C)", "Humidity (%)", "Timestamp"],
       ...samples.map((sample) => [
         safeNumber(sample.dryerTempC),
         safeNumber(sample.collectorTempC),
@@ -116,8 +122,8 @@ export default function SessionDetail() {
           <table className="w-full min-w-[520px] border-collapse text-left">
             <thead>
               <tr>
-                <th className="px-3 py-2 text-xs">Dryer Temp. (°C)</th>
-                <th className="px-3 py-2 text-xs">Collector Temp. (°C)</th>
+                <th className="px-3 py-2 text-xs">Dryer Temp. (Â°C)</th>
+                <th className="px-3 py-2 text-xs">Collector Temp. (Â°C)</th>
                 <th className="px-3 py-2 text-xs">Humidity (%)</th>
                 <th className="px-3 py-2 text-xs">Timestamp</th>
               </tr>
