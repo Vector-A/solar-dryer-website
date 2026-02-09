@@ -1,0 +1,51 @@
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "Sora", system-ui, -apple-system, Segoe UI, sans-serif;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #090909;
+  color: #f3f3f3;
+}
+
+.app-bg {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at bottom, rgba(255, 106, 0, 0.25), rgba(10, 6, 3, 0) 60%),
+    radial-gradient(ellipse at 70% 90%, rgba(120, 50, 20, 0.25), rgba(10, 6, 3, 0) 60%),
+    #0b0b0b;
+}
+
+.glass-card {
+  background: linear-gradient(145deg, rgba(60, 45, 40, 0.55), rgba(30, 22, 20, 0.75));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 25px 40px rgba(0, 0, 0, 0.55);
+}
+
+.pill-nav {
+  background: linear-gradient(180deg, #5b5b5b, #414141);
+}
+
+.table-shell {
+  background: #f3f3f3;
+  color: #1a1a1a;
+}
+
+.table-shell th {
+  background: #ededed;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .table-shell {
+    font-size: 12px;
+  }
+}
