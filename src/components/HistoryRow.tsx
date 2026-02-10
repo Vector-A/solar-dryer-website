@@ -15,7 +15,7 @@ export default function HistoryRow({ id, name, dateLabel, onDelete }: HistoryRow
         <div className="text-sm font-semibold text-gray-100 sm:text-base">{name}</div>
         <div className="flex items-center gap-2 text-xs text-ember sm:text-sm">
           <CalendarIcon className="h-4 w-4" />
-          <span>{dateLabel}</span>
+          <span>{dateLabel || "--"}</span>
         </div>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">

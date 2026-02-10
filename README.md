@@ -1,4 +1,4 @@
-# Solar Dryer UI (React + Vite + Tailwind)
+﻿# Solar Dryer UI (React + Vite + Tailwind)
 
 ## Setup
 1. Install dependencies.
@@ -10,7 +10,7 @@ npm install
 npm run dev
 ```
 
-## Firebase Data Model
+## Firebase Data Model (Firestore)
 Collections/docs used by the app:
 - `sessions` (collection): `{ name, status: "running" | "stopped", createdAt, endedAt, deviceId }`
 - `sessions/{sessionId}/samples` (subcollection): `{ dryerTempC, collectorTempC, humidityPct, createdAt, timestampMs }`

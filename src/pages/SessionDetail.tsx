@@ -79,14 +79,14 @@ export default function SessionDetail() {
 
   const handleDownload = () => {
     const rows = [
-      ["Dryer Temp (°C)", "Collector Temp (°C)", "Humidity (%)", "Timestamp"],
+      ["Timestamp", "Dryer Temperature", "Collector Temperature", "Humidity (%)"],
       ...samples.map((sample) => [
-        safeNumber(sample.dryerTempC),
-        safeNumber(sample.collectorTempC),
-        safeNumber(sample.humidityPct),
         sample.timestampMs
           ? new Date(sample.timestampMs).toISOString()
-          : formatDateTime(sample.createdAt)
+          : formatDateTime(sample.createdAt),
+        safeNumber(sample.dryerTempC),
+        safeNumber(sample.collectorTempC),
+        safeNumber(sample.humidityPct)
       ])
     ];
     downloadCsv(`${session?.name || "session"}.csv`, rows);
@@ -122,15 +122,20 @@ export default function SessionDetail() {
           <table className="w-full min-w-[520px] border-collapse text-left">
             <thead>
               <tr>
-                <th className="px-3 py-2 text-xs">Dryer Temp. (°C)</th>
-                <th className="px-3 py-2 text-xs">Collector Temp. (°C)</th>
-                <th className="px-3 py-2 text-xs">Humidity (%)</th>
                 <th className="px-3 py-2 text-xs">Timestamp</th>
+                <th className="px-3 py-2 text-xs">Dryer temperature</th>
+                <th className="px-3 py-2 text-xs">Collector temperature</th>
+                <th className="px-3 py-2 text-xs">Humidity (%)</th>
               </tr>
             </thead>
             <tbody>
               {samples.map((sample) => (
                 <tr key={sample.id} className="border-b border-gray-200 last:border-b-0">
+                  <td className="px-3 py-2 text-xs text-gray-700">
+                    {sample.timestampMs
+                      ? new Date(sample.timestampMs).toLocaleString()
+                      : formatDateTime(sample.createdAt)}
+                  </td>
                   <td className="px-3 py-2 text-xs">
                     <span className="rounded-full border border-emberSoft px-2 py-0.5 text-emberDark">
                       {safeNumber(sample.dryerTempC)}
@@ -145,11 +150,6 @@ export default function SessionDetail() {
                     <span className="rounded-full border border-emberSoft px-2 py-0.5 text-emberDark">
                       {safeNumber(sample.humidityPct)}
                     </span>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700">
-                    {sample.timestampMs
-                      ? new Date(sample.timestampMs).toLocaleString()
-                      : formatDateTime(sample.createdAt)}
                   </td>
                 </tr>
               ))}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import HistoryRow from "../components/HistoryRow";
 import { db } from "../firebase";
@@ -10,6 +10,7 @@ interface SessionItem {
   id: string;
   name: string;
   createdAt?: any;
+  createdAtClient?: number;
 }
 
 export default function History() {
@@ -60,6 +61,32 @@ export default function History() {
     }
   };
 
+  const ordered = useMemo(() => {
+    const extractNumber = (name?: string) => {
+      const match = name?.match(/Experiment\s+(\d+)/i);
+      return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+    };
+    return [...sessions].sort((a, b) => {
+      const numA = extractNumber(a.name);
+      const numB = extractNumber(b.name);
+      if (numA !== numB) return numA - numB;
+      const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+      const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+      return timeA - timeB;
+    });
+  }, [sessions]);
+
+  useEffect(() => {
+    const extractNumber = (name?: string) => {
+      const match = name?.match(/Experiment\s+(\d+)/i);
+      return match ? Number(match[1]) : 0;
+    };
+    const maxNumber = ordered.reduce((max, session) => Math.max(max, extractNumber(session.name)), 0);
+    try {
+      window.sessionStorage.setItem("solar_dryer_experiment_counter", String(maxNumber));
+    } catch {}
+  }, [ordered]);
+
   return (
     <div className="w-full">
       <h1 className="mb-6 text-3xl font-semibold">History</h1>
@@ -71,13 +98,18 @@ export default function History() {
             <Skeleton className="h-16" />
           </>
         )}
+        {!isLoading && ordered.length === 0 && (
+          <div className="text-sm text-gray-300">
+            History is empty, please start a new experiment to record
+          </div>
+        )}
         {!isLoading &&
-          sessions.map((session) => (
+          ordered.map((session) => (
             <HistoryRow
               key={session.id}
               id={session.id}
               name={session.name || "Experiment"}
-              dateLabel={formatDate(session.createdAt)}
+              dateLabel={formatDate(session.createdAt ?? session.createdAtClient)}
               onDelete={handleDelete}
             />
           ))}

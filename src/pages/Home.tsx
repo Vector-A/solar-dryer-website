@@ -1,24 +1,18 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  addDoc,
   collection,
   doc,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
   serverTimestamp as firestoreServerTimestamp,
   setDoc,
-  updateDoc,
-  where
+  updateDoc
 } from "firebase/firestore";
-import { onValue, ref } from "firebase/database";
+import { onValue, ref, set as rtdbSet } from "firebase/database";
 import MetricCard from "../components/MetricCard";
 import HumidityPill from "../components/HumidityPill";
 import { db, rtdb } from "../firebase";
 import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import { useActiveSession } from "../context/ActiveSessionContext";
 
 interface LiveData {
   Hum?: number;
@@ -27,72 +21,36 @@ interface LiveData {
 }
 
 const DEVICE_ID = "dryer-01";
+const LIVE_PATH = "Solardryer";
+const COMMAND_PATH = `devices/${DEVICE_ID}/command`;
+const LOG_INTERVAL_MS = 60_000;
+const TIMER_INTERVAL_MS = 1000;
+
+const formatElapsed = (startTimestamp: number) => {
+  const diffMs = Date.now() - startTimestamp;
+  const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  return hours > 0
+    ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+    : `${pad(minutes)}:${pad(seconds)}`;
+};
 
 export default function Home() {
   const [liveData, setLiveData] = useState<LiveData>({});
   const [isBusy, setIsBusy] = useState(false);
   const [isLiveLoading, setIsLiveLoading] = useState(true);
-  const [activeSessionName, setActiveSessionName] = useState<string | null>(null);
-  const [activeSessionStartedAt, setActiveSessionStartedAt] = useState<any | null>(null);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [localStartMs, setLocalStartMs] = useState<number | null>(null);
-  const [isActiveLoading, setIsActiveLoading] = useState(true);
   const [elapsedLabel, setElapsedLabel] = useState<string>("00:00");
   const { push } = useToast();
+  const { activeSession, startSession, stopSession } = useActiveSession();
   const logTimerRef = useRef<number | null>(null);
   const lastLogRef = useRef<number>(0);
-  const lastStartRef = useRef<number | null>(null);
-  const storageKey = "solar_dryer_active_start";
-  const storageNameKey = "solar_dryer_active_name";
-
-  const readStoredActive = () => {
-    try {
-      const stored = window.localStorage.getItem(storageKey);
-      if (!stored) return null;
-      const parsed = JSON.parse(stored) as { id?: string; startMs?: number };
-      return parsed?.id ? parsed : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const writeStoredActive = (id: string, startMs: number, name?: string) => {
-    try {
-      window.localStorage.setItem(storageKey, JSON.stringify({ id, startMs }));
-      if (name) {
-        window.localStorage.setItem(storageNameKey, name);
-      }
-    } catch {}
-  };
-
-  const clearStoredActive = () => {
-    try {
-      window.localStorage.removeItem(storageKey);
-      window.localStorage.removeItem(storageNameKey);
-    } catch {}
-  };
-
-  useEffect(() => {
-    try {
-      const parsed = readStoredActive();
-      if (parsed?.startMs && typeof parsed.startMs === "number") {
-        setLocalStartMs(parsed.startMs);
-        lastStartRef.current = parsed.startMs;
-      }
-      if (parsed?.id && !activeSessionId) {
-        setActiveSessionId(parsed.id);
-      }
-      const storedName = window.localStorage.getItem(storageNameKey);
-      if (storedName && !activeSessionName) {
-        setActiveSessionName(storedName);
-      }
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     const fallback = setTimeout(() => setIsLiveLoading(false), 3000);
-    const liveRef = ref(rtdb, "Solardryer");
+    const liveRef = ref(rtdb, LIVE_PATH);
     const unsub = onValue(
       liveRef,
       (snap) => {
@@ -113,79 +71,18 @@ export default function Home() {
   }, [push]);
 
   useEffect(() => {
-    const fallback = setTimeout(() => setIsActiveLoading(false), 3000);
-    const activeQuery = query(
-      collection(db, "sessions"),
-      where("status", "==", "running"),
-      orderBy("createdAt", "desc"),
-      limit(1)
-    );
-    const unsub = onSnapshot(
-      activeQuery,
-      (snap) => {
-        const active = snap.docs[0]?.data();
-        const activeId = snap.docs[0]?.id || null;
-
-        if (!activeId) {
-          setActiveSessionName(null);
-          setActiveSessionId(null);
-          setActiveSessionStartedAt(null);
-          setLocalStartMs(null);
-          lastStartRef.current = null;
-          clearStoredActive();
-        } else {
-          const stored = readStoredActive();
-          const storedStart = stored?.id === activeId ? stored.startMs ?? null : null;
-
-          setActiveSessionName(active?.name || null);
-          setActiveSessionId(activeId);
-
-          const createdMs = active?.createdAt?.toDate ? active.createdAt.toDate().getTime() : null;
-          const startMs = storedStart ?? createdMs ?? lastStartRef.current ?? Date.now();
-          lastStartRef.current = startMs;
-          setActiveSessionStartedAt(new Date(startMs));
-
-          writeStoredActive(activeId, startMs, active?.name);
-        }
-
-        setIsActiveLoading(false);
-        clearTimeout(fallback);
-      },
-      () => {
-        push("Failed to load active session status.");
-        setIsActiveLoading(false);
-        clearTimeout(fallback);
-      }
-    );
-    return () => {
-      clearTimeout(fallback);
-      unsub();
-    };
-  }, [push]);
-
-  useEffect(() => {
-    const startedValue = activeSessionStartedAt ?? (localStartMs ? new Date(localStartMs) : null);
-    if (!startedValue) {
+    if (!activeSession?.startTimestamp) {
       setElapsedLabel("00:00");
       return;
     }
-    const started = startedValue?.toDate ? startedValue.toDate() : new Date(startedValue);
-    const updateLabel = () => {
-      const diffMs = Date.now() - started.getTime();
-      const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      const seconds = totalSeconds % 60;
-      const pad = (value: number) => value.toString().padStart(2, "0");
-      setElapsedLabel(hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`);
-    };
+    const updateLabel = () => setElapsedLabel(formatElapsed(activeSession.startTimestamp));
     updateLabel();
-    const timer = setInterval(updateLabel, 1000);
+    const timer = setInterval(updateLabel, TIMER_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [activeSessionStartedAt, localStartMs]);
+  }, [activeSession?.startTimestamp]);
 
   useEffect(() => {
-    if (!activeSessionId) {
+    if (!activeSession?.id) {
       if (logTimerRef.current) {
         window.clearInterval(logTimerRef.current);
         logTimerRef.current = null;
@@ -193,13 +90,11 @@ export default function Home() {
       return;
     }
 
-    if (logTimerRef.current) {
-      return;
-    }
+    if (logTimerRef.current) return;
 
     logTimerRef.current = window.setInterval(async () => {
       const now = Date.now();
-      if (now - lastLogRef.current < 1000) return;
+      if (now - lastLogRef.current < LOG_INTERVAL_MS) return;
 
       const dryerTempC = liveData.Temp1;
       const collectorTempC = liveData.Temp2;
@@ -214,7 +109,7 @@ export default function Home() {
       }
 
       try {
-        await addDoc(collection(db, "sessions", activeSessionId, "samples"), {
+        await setDoc(doc(collection(db, "sessions", activeSession.id, "samples")), {
           dryerTempC,
           collectorTempC,
           humidityPct,
@@ -225,7 +120,7 @@ export default function Home() {
       } catch (error) {
         console.error("Failed to log sample", error);
       }
-    }, 1000);
+    }, LOG_INTERVAL_MS);
 
     return () => {
       if (logTimerRef.current) {
@@ -233,7 +128,7 @@ export default function Home() {
         logTimerRef.current = null;
       }
     };
-  }, [activeSessionId, liveData.Temp1, liveData.Temp2, liveData.Hum]);
+  }, [activeSession?.id, liveData.Temp1, liveData.Temp2, liveData.Hum]);
 
   const display = useMemo(() => {
     const dryer = liveData.Temp1 ?? 20;
@@ -246,98 +141,78 @@ export default function Home() {
     };
   }, [liveData]);
 
-  const createExperimentName = async () => {
-    const allSnap = await getDocs(query(collection(db, "sessions")));
-    let maxNumber = 0;
-    allSnap.docs.forEach((docSnap) => {
-      const name = docSnap.data()?.name as string | undefined;
-      const match = name?.match(/Experiment\s+(\d+)/i);
-      if (match) {
-        maxNumber = Math.max(maxNumber, Number(match[1]));
-      }
-    });
-    return `Experiment ${maxNumber + 1}`;
+  const createExperimentName = () => {
+    try {
+      const key = "solar_dryer_experiment_counter";
+      const current = Number(window.sessionStorage.getItem(key) || "0");
+      const next = current + 1;
+      window.sessionStorage.setItem(key, String(next));
+      return `Experiment ${next}`;
+    } catch {
+      return `Experiment ${Date.now()}`;
+    }
   };
 
   const handleTurnOn = async () => {
+    if (isBusy || activeSession) return;
+    setIsBusy(true);
     try {
-      if (isBusy || activeSessionId) return;
-      setIsBusy(true);
-      const name = await createExperimentName();
-      const sessionRef = await addDoc(collection(db, "sessions"), {
+      const name = createExperimentName();
+      const sessionRef = doc(collection(db, "sessions"));
+      const startTimestamp = Date.now();
+
+      startSession({ id: sessionRef.id, name, startTimestamp });
+
+      // Firestore write in background
+      void setDoc(sessionRef, {
         name,
         status: "running",
         createdAt: firestoreServerTimestamp(),
+        createdAtClient: startTimestamp,
         deviceId: DEVICE_ID
+      }).catch((error) => {
+        console.error("Failed to start session", error);
+        push("Failed to start the session.");
       });
-      const startMs = Date.now();
-      
-      // Update local state immediately for better UX
-      setActiveSessionName(name);
-      setActiveSessionId(sessionRef.id);
-      setLocalStartMs(startMs);
-      lastStartRef.current = startMs;
-      setActiveSessionStartedAt(new Date(startMs));
-      writeStoredActive(sessionRef.id, startMs, name);
-      
-      // Send device command
-      await setDoc(doc(db, "devices", DEVICE_ID, "command"), {
-        recording: true,
-        activeSessionId: sessionRef.id,
-        updatedAt: firestoreServerTimestamp()
+
+      // RTDB command for fast response
+      void rtdbSet(ref(rtdb, COMMAND_PATH), {
+        action: "start",
+        timestamp: Date.now()
+      }).catch((error) => {
+        console.error("Failed to send start command", error);
+        push("Failed to send start command.");
       });
-      
-      push("Session started successfully!");
     } catch (error) {
       console.error("Failed to start session", error);
-      // Clear state on error
-      setActiveSessionName(null);
-      setActiveSessionId(null);
-      setLocalStartMs(null);
-      lastStartRef.current = null;
-      clearStoredActive();
       push("Failed to start the session.");
+      stopSession();
     } finally {
       setIsBusy(false);
     }
   };
 
   const handleTurnOff = async () => {
+    if (isBusy || !activeSession) return;
+    setIsBusy(true);
+    const sessionIdToStop = activeSession.id;
+    stopSession();
     try {
-      if (isBusy) return;
-      setIsBusy(true);
-      
-      const stored = readStoredActive();
-      const sessionIdToStop = activeSessionId ?? stored?.id ?? null;
-      
-      // Don't proceed if there's nothing to stop
-      if (!sessionIdToStop) {
-        setIsBusy(false);
-        return;
-      }
-      
-      // Stop the session
-      await updateDoc(doc(db, "sessions", sessionIdToStop), {
+      void updateDoc(doc(db, "sessions", sessionIdToStop), {
         status: "stopped",
         endedAt: firestoreServerTimestamp()
+      }).catch((error) => {
+        console.error("Failed to stop session", error);
+        push("Failed to stop the session.");
       });
-      
-      // Send device command
-      await setDoc(doc(db, "devices", DEVICE_ID, "command"), {
-        recording: false,
-        activeSessionId: null,
-        updatedAt: firestoreServerTimestamp()
+
+      void rtdbSet(ref(rtdb, COMMAND_PATH), {
+        action: "stop",
+        timestamp: Date.now()
+      }).catch((error) => {
+        console.error("Failed to send stop command", error);
+        push("Failed to send stop command.");
       });
-      
-      // Clear state immediately for better UX
-      setActiveSessionName(null);
-      setActiveSessionStartedAt(null);
-      setActiveSessionId(null);
-      setLocalStartMs(null);
-      lastStartRef.current = null;
-      clearStoredActive();
-      
-      push("Session stopped successfully!");
     } catch (error) {
       console.error("Failed to stop session", error);
       push("Failed to stop the session.");
@@ -357,30 +232,22 @@ export default function Home() {
             <button
               type="button"
               onClick={handleTurnOn}
-              disabled={isBusy || !!activeSessionId}
-              className={`w-24 rounded-full px-4 py-2 text-sm font-semibold transition ${
-                isBusy
-                  ? "bg-gray-400 text-gray-600 cursor-not-allowed"
-                  : activeSessionId
-                    ? "bg-gray-500 text-white cursor-not-allowed"
-                    : "bg-green-500 hover:bg-green-400 text-black cursor-pointer"
-              }`}
+              disabled={isBusy || !!activeSession}
+              className={`w-24 rounded-full px-4 py-2 text-sm font-semibold text-black transition ${
+                activeSession ? "bg-gray-500" : "bg-green-500 hover:bg-green-400"
+              } disabled:opacity-60`}
             >
-              {isBusy ? "..." : "Turn On"}
+              Turn On
             </button>
             <button
               type="button"
               onClick={handleTurnOff}
-              disabled={isBusy || !activeSessionId}
-              className={`w-24 rounded-full px-4 py-2 text-sm font-semibold transition ${
-                isBusy
-                  ? "bg-gray-400 text-gray-600 cursor-not-allowed"
-                  : activeSessionId
-                    ? "bg-red-600 hover:bg-red-500 text-white cursor-pointer"
-                    : "bg-gray-500 text-white cursor-not-allowed"
-              }`}
+              disabled={isBusy || !activeSession}
+              className={`w-24 rounded-full px-4 py-2 text-sm font-semibold text-white transition ${
+                activeSession ? "bg-red-600 hover:bg-red-500" : "bg-gray-500"
+              } disabled:opacity-60`}
             >
-              {isBusy ? "..." : "Turn Off"}
+              Turn Off
             </button>
           </div>
         </div>
@@ -392,10 +259,8 @@ export default function Home() {
       </p>
 
       <div className="mt-4 flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1 text-xs text-gray-200">
-        {isActiveLoading ? (
-          <Skeleton className="h-3 w-24" />
-        ) : activeSessionName ? (
-          <span>Active Session: {activeSessionName} - {elapsedLabel}</span>
+        {activeSession ? (
+          <span>Active Session: {activeSession.name} - {elapsedLabel}</span>
         ) : (
           <span>No Active Session</span>
         )}

@@ -1,8 +1,13 @@
-import { Timestamp } from "firebase/firestore";
-
-export function formatDate(value?: Timestamp | Date | null): string {
-  if (!value) return "--";
-  const date = value instanceof Date ? value : value.toDate();
+﻿export function formatDate(value?: any): string {
+  if (value === undefined || value === null) return "--";
+  const date =
+    value instanceof Date
+      ? value
+      : typeof value === "number"
+        ? new Date(value)
+        : value?.toDate
+          ? value.toDate()
+          : new Date(value);
   return date.toLocaleDateString(undefined, {
     year: "numeric",
     month: "2-digit",
@@ -10,9 +15,16 @@ export function formatDate(value?: Timestamp | Date | null): string {
   });
 }
 
-export function formatDateTime(value?: Timestamp | Date | null): string {
-  if (!value) return "--";
-  const date = value instanceof Date ? value : value.toDate();
+export function formatDateTime(value?: any): string {
+  if (value === undefined || value === null) return "--";
+  const date =
+    value instanceof Date
+      ? value
+      : typeof value === "number"
+        ? new Date(value)
+        : value?.toDate
+          ? value.toDate()
+          : new Date(value);
   return date.toLocaleString();
 }
 
