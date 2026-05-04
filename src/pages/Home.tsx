@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   collection,
   doc,
@@ -144,8 +144,8 @@ export default function Home() {
     const collector = liveData.Temp2 ?? 20;
     const humidity = liveData.Hum ?? 20;
     return {
-      dryer: `${dryer}\u00B0C`,
-      collector: `${collector}\u00B0C`,
+      dryer: `${dryer}°C`,
+      collector: `${collector}°C`,
       humidity: `${humidity}%`
     };
   }, [liveData]);
