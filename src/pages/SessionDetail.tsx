@@ -100,9 +100,9 @@ export default function SessionDetail() {
       ["Timestamp", "Temp1 (°C)", "Temp2 (°C)", "Humidity (%)"],
       ...samples.map((s) => [
         s.timestamp ? new Date(s.timestamp * 1000).toISOString() : s.id,
-        s.Temp1 ?? "--",
-        s.Temp2 ?? "--",
-        s.Hum ?? "--",
+        String(s.Temp1 ?? "--"),
+        String(s.Temp2 ?? "--"),
+        String(s.Hum ?? "--"),
       ]),
     ];
     downloadCsv(`${session?.name || "session"}.csv`, rows);
