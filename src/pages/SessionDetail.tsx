@@ -12,8 +12,6 @@ interface SessionData {
   name?: string;
   readingsPath?: string;
   createdAt?: any;
-  createdAtClient?: number;
-  endedAt?: any;
   conditionLabel?: string;
 }
 
@@ -60,34 +58,10 @@ export default function SessionDetail() {
         const data = (snap.data() as SessionData) || null;
         setSession(data);
 
-        // Use createdAtClient if available, fall back to createdAt
-        const startMs =
-          data?.createdAtClient ??
-          (data?.createdAt?.toDate ? data.createdAt.toDate().getTime() : null);
-
-        if (!startMs) {
-          setIsLoading(false);
-          clearTimeout(fallback);
-          return;
-        }
-
-        const startSec = Math.floor(startMs / 1000);
-
         const setupFlatListener = () => {
           unsubRtdb = onValue(
             ref(rtdb, "readings"),
-            (snap) => {
-              const items: SampleItem[] = [];
-              snap.forEach((child) => {
-                const keyNum = Number(child.key);
-                if (!isNaN(keyNum) && keyNum >= startSec) {
-                  items.push({ id: child.key!, ...(child.val() as Omit<SampleItem, "id">) });
-                }
-              });
-              setSamples(items);
-              setIsLoading(false);
-              clearTimeout(fallback);
-            },
+            handleSnap,
             handleError
           );
         };
