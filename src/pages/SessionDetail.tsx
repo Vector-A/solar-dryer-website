@@ -72,9 +72,6 @@ export default function SessionDetail() {
         }
 
         const startSec = Math.floor(startMs / 1000);
-        const endSec = data?.endedAt?.toDate
-          ? Math.floor(data.endedAt.toDate().getTime() / 1000)
-          : Number.MAX_SAFE_INTEGER;
 
         const setupFlatListener = () => {
           unsubRtdb = onValue(
@@ -83,7 +80,7 @@ export default function SessionDetail() {
               const items: SampleItem[] = [];
               snap.forEach((child) => {
                 const keyNum = Number(child.key);
-                if (!isNaN(keyNum) && keyNum >= startSec && keyNum <= endSec) {
+                if (!isNaN(keyNum) && keyNum >= startSec) {
                   items.push({ id: child.key!, ...(child.val() as Omit<SampleItem, "id">) });
                 }
               });
