@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
-import { onValue, ref } from "firebase/database";
+import { get, onValue, ref } from "firebase/database";
 import { db, rtdb } from "../firebase";
 import { downloadCsv } from "../lib/csv";
 import { formatDate } from "../lib/format";
@@ -12,6 +12,8 @@ interface SessionData {
   name?: string;
   readingsPath?: string;
   createdAt?: any;
+  createdAtClient?: number;
+  endedAt?: any;
   conditionLabel?: string;
 }
 
@@ -37,34 +39,82 @@ export default function SessionDetail() {
     let unsubRtdb: (() => void) | null = null;
     const fallback = setTimeout(() => setIsLoading(false), 5000);
 
+    const handleSnap = (snap: any) => {
+      const items: SampleItem[] = [];
+      snap.forEach((child: any) => {
+        items.push({ id: child.key!, ...(child.val() as Omit<SampleItem, "id">) });
+      });
+      setSamples(items);
+      setIsLoading(false);
+      clearTimeout(fallback);
+    };
+
+    const handleError = () => {
+      push("Failed to load session readings.");
+      setIsLoading(false);
+      clearTimeout(fallback);
+    };
+
     getDoc(doc(db, "sessions", sessionId))
       .then((snap) => {
         const data = (snap.data() as SessionData) || null;
         setSession(data);
 
-        if (!data?.readingsPath) {
+        // Use createdAtClient if available, fall back to createdAt
+        const startMs =
+          data?.createdAtClient ??
+          (data?.createdAt?.toDate ? data.createdAt.toDate().getTime() : null);
+
+        if (!startMs) {
           setIsLoading(false);
           clearTimeout(fallback);
           return;
         }
 
-        unsubRtdb = onValue(
-          ref(rtdb, `readings/${data.readingsPath}`),
-          (snap) => {
-            const items: SampleItem[] = [];
-            snap.forEach((child) => {
-              items.push({ id: child.key!, ...(child.val() as Omit<SampleItem, "id">) });
-            });
-            setSamples(items);
-            setIsLoading(false);
-            clearTimeout(fallback);
-          },
-          () => {
-            push("Failed to load session readings.");
-            setIsLoading(false);
-            clearTimeout(fallback);
-          }
-        );
+        const startSec = Math.floor(startMs / 1000);
+        const endSec = data?.endedAt?.toDate
+          ? Math.floor(data.endedAt.toDate().getTime() / 1000)
+          : Number.MAX_SAFE_INTEGER;
+
+        const setupFlatListener = () => {
+          unsubRtdb = onValue(
+            ref(rtdb, "readings"),
+            (snap) => {
+              const items: SampleItem[] = [];
+              snap.forEach((child) => {
+                const keyNum = Number(child.key);
+                if (!isNaN(keyNum) && keyNum >= startSec && keyNum <= endSec) {
+                  items.push({ id: child.key!, ...(child.val() as Omit<SampleItem, "id">) });
+                }
+              });
+              setSamples(items);
+              setIsLoading(false);
+              clearTimeout(fallback);
+            },
+            handleError
+          );
+        };
+
+        if (data?.readingsPath) {
+          // Check if microcontroller has written to the organised sub-path yet
+          get(ref(rtdb, `readings/${data.readingsPath}`))
+            .then((subSnap) => {
+              if (subSnap.exists()) {
+                // Firmware updated: data is organised under sub-path
+                unsubRtdb = onValue(
+                  ref(rtdb, `readings/${data.readingsPath}`),
+                  handleSnap,
+                  handleError
+                );
+              } else {
+                // Firmware not yet updated: fall back to flat readings filtered client-side
+                setupFlatListener();
+              }
+            })
+            .catch(() => setupFlatListener());
+        } else {
+          setupFlatListener();
+        }
       })
       .catch(() => {
         push("Failed to load session details.");
