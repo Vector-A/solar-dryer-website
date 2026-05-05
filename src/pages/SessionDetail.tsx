@@ -84,7 +84,7 @@ export default function SessionDetail() {
     const rows = [
       ["Timestamp", "Temp1 (°C)", "Temp2 (°C)", "Humidity (%)"],
       ...samples.map((s) => [
-        s.timestamp ? new Date(s.timestamp * 1000).toISOString() : s.id,
+        s.timestamp ? new Date(s.timestamp * 1000).toISOString() : "--",
         String(s.Temp1 ?? "--"),
         String(s.Temp2 ?? "--"),
         String(s.Hum ?? "--"),
@@ -144,7 +144,7 @@ export default function SessionDetail() {
                   <td className="px-3 py-2 text-xs text-gray-300">
                     {s.timestamp
                       ? new Date(s.timestamp * 1000).toLocaleString()
-                      : s.id}
+                      : "--"}
                   </td>
                   <td className="px-3 py-2 text-xs">
                     <span className="rounded-full border border-emberSoft px-2 py-0.5 text-emberDark">
