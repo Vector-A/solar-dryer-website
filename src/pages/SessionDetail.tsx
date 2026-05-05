@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
-import { endAt, onValue, orderByChild, query, ref, startAt } from "firebase/database";
+import { onValue, ref } from "firebase/database";
 import { db, rtdb } from "../firebase";
 import { downloadCsv } from "../lib/csv";
 import { formatDate } from "../lib/format";
@@ -10,10 +10,8 @@ import { useToast } from "../components/Toast";
 
 interface SessionData {
   name?: string;
+  readingsPath?: string;
   createdAt?: any;
-  createdAtClient?: number;
-  endedAt?: any;
-  status?: string;
   conditionLabel?: string;
 }
 
@@ -44,27 +42,14 @@ export default function SessionDetail() {
         const data = (snap.data() as SessionData) || null;
         setSession(data);
 
-        if (!data?.createdAtClient) {
+        if (!data?.readingsPath) {
           setIsLoading(false);
           clearTimeout(fallback);
           return;
         }
 
-        // RTDB keys are Unix seconds; createdAtClient is ms
-        const startSec = Math.floor(data.createdAtClient / 1000).toString();
-        const endSec = data.endedAt?.toDate
-          ? Math.floor(data.endedAt.toDate().getTime() / 1000).toString()
-          : "9999999999";
-
-        const readingsQuery = query(
-          ref(rtdb, "readings"),
-          orderByChild("timestamp"),
-          startAt(Number(startSec)),
-          endAt(Number(endSec))
-        );
-
         unsubRtdb = onValue(
-          readingsQuery,
+          ref(rtdb, `readings/${data.readingsPath}`),
           (snap) => {
             const items: SampleItem[] = [];
             snap.forEach((child) => {

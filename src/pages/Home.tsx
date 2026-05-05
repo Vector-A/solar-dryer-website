@@ -113,6 +113,7 @@ export default function Home() {
     setIsBusy(true);
     try {
       const name = createExperimentName();
+      const readingsPath = name.replace(/\s+/g, "_");
       const sessionRef = doc(collection(db, "sessions"));
       const startTimestamp = Date.now();
 
@@ -120,6 +121,7 @@ export default function Home() {
 
       void setDoc(sessionRef, {
         name,
+        readingsPath,
         status: "running",
         createdAt: firestoreServerTimestamp(),
         createdAtClient: startTimestamp,
@@ -134,6 +136,7 @@ export default function Home() {
       void rtdbSet(ref(rtdb, COMMAND_PATH), {
         action: "start",
         sessionId: sessionRef.id,
+        readingsPath,
         conditionId: condition.id,
         timestamp: Date.now()
       }).catch((error) => {
