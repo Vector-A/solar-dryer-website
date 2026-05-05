@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   collection,
   doc,
@@ -24,7 +24,6 @@ interface LiveData {
 const DEVICE_ID = "dryer-01";
 const LIVE_PATH = "Solardryer";
 const COMMAND_PATH = `devices/${DEVICE_ID}/command`;
-const LOG_INTERVAL_MS = 60_000;
 const TIMER_INTERVAL_MS = 1000;
 
 const formatElapsed = (startTimestamp: number) => {
@@ -47,10 +46,6 @@ export default function Home() {
   const [showConditionPicker, setShowConditionPicker] = useState(false);
   const { push } = useToast();
   const { activeSession, isLoading: isSessionLoading, startSession, stopSession } = useActiveSession();
-  const liveDataRef = useRef<LiveData>({});
-  const activeSessionNameRef = useRef<string>("");
-  const logTimerRef = useRef<number | null>(null);
-  const initialWriteSessionRef = useRef<string | null>(null);
 
   useEffect(() => {
     const fallback = setTimeout(() => setIsLiveLoading(false), 3000);
@@ -73,60 +68,6 @@ export default function Home() {
       unsub();
     };
   }, [push]);
-
-  useEffect(() => {
-    liveDataRef.current = liveData;
-  }, [liveData]);
-
-  useEffect(() => {
-    activeSessionNameRef.current = activeSession?.name ?? "";
-  }, [activeSession?.name]);
-
-  useEffect(() => {
-    if (!activeSession?.id) {
-      if (logTimerRef.current !== null) {
-        window.clearInterval(logTimerRef.current);
-        logTimerRef.current = null;
-      }
-      return;
-    }
-    if (logTimerRef.current !== null) return;
-
-    const writeReading = async () => {
-      const { Hum, Temp1, Temp2 } = liveDataRef.current;
-      if (Hum === undefined || Temp1 === undefined || Temp2 === undefined) return;
-      const now = new Date();
-      const timestampSec = Math.floor(now.getTime() / 1000);
-      const date = now.toISOString().slice(0, 10);
-      const time = now.toTimeString().slice(0, 8).replace(/:/g, "-");
-      const key = `ex_${date}_${time}`;
-      try {
-        await rtdbSet(ref(rtdb, `readings/${key}`), {
-          Hum,
-          Temp1,
-          Temp2,
-          timestamp: timestampSec,
-        });
-      } catch (err) {
-        console.error("Failed to write reading", err);
-      }
-    };
-
-    // Write immediately on session start — use a ref to prevent duplicate
-    // in React StrictMode which mounts effects twice in development
-    if (initialWriteSessionRef.current !== activeSession.id) {
-      initialWriteSessionRef.current = activeSession.id;
-      void writeReading();
-    }
-    logTimerRef.current = window.setInterval(writeReading, LOG_INTERVAL_MS);
-
-    return () => {
-      if (logTimerRef.current !== null) {
-        window.clearInterval(logTimerRef.current);
-        logTimerRef.current = null;
-      }
-    };
-  }, [activeSession?.id]);
 
   useEffect(() => {
     if (!activeSession?.startTimestamp) {
@@ -190,7 +131,6 @@ export default function Home() {
         push("Failed to start the session.");
       });
 
-      // RTDB command includes conditionId so the microcontroller knows which condition is active
       void rtdbSet(ref(rtdb, COMMAND_PATH), {
         action: "start",
         sessionId: sessionRef.id,
