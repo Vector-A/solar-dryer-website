@@ -24,7 +24,6 @@ interface LiveData {
 const DEVICE_ID = "dryer-01";
 const LIVE_PATH = "Solardryer";
 const COMMAND_PATH = `devices/${DEVICE_ID}/command`;
-const SESSION_PATH = `devices/${DEVICE_ID}/session`;
 const TIMER_INTERVAL_MS = 1000;
 
 const formatElapsed = (startTimestamp: number) => {
@@ -134,17 +133,11 @@ export default function Home() {
         push("Failed to start the session.");
       });
 
-      // Write persistent session info so microcontroller always knows where to log
-      void rtdbSet(ref(rtdb, SESSION_PATH), {
+      void rtdbSet(ref(rtdb, COMMAND_PATH), {
+        action: "start",
         id: sessionRef.id,
         readingsPath,
         conditionId: condition.id,
-      }).catch((error) => {
-        console.error("Failed to write session config", error);
-      });
-
-      void rtdbSet(ref(rtdb, COMMAND_PATH), {
-        action: "start",
         timestamp: Date.now()
       }).catch((error) => {
         console.error("Failed to send start command", error);
