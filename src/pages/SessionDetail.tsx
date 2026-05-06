@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
-import { get, onValue, ref } from "firebase/database";
+import { onValue, ref } from "firebase/database";
 import { db, rtdb } from "../firebase";
 import { downloadCsv } from "../lib/csv";
 import { formatDate } from "../lib/format";
@@ -58,34 +58,12 @@ export default function SessionDetail() {
         const data = (snap.data() as SessionData) || null;
         setSession(data);
 
-        const setupFlatListener = () => {
-          unsubRtdb = onValue(
-            ref(rtdb, "readings"),
-            handleSnap,
-            handleError
-          );
-        };
+        // Read from organised sub-path if firmware supports it, otherwise read all flat readings
+        const rtdbPath = data?.readingsPath
+          ? `readings/${data.readingsPath}`
+          : "readings";
 
-        if (data?.readingsPath) {
-          // Check if microcontroller has written to the organised sub-path yet
-          get(ref(rtdb, `readings/${data.readingsPath}`))
-            .then((subSnap) => {
-              if (subSnap.exists()) {
-                // Firmware updated: data is organised under sub-path
-                unsubRtdb = onValue(
-                  ref(rtdb, `readings/${data.readingsPath}`),
-                  handleSnap,
-                  handleError
-                );
-              } else {
-                // Firmware not yet updated: fall back to flat readings filtered client-side
-                setupFlatListener();
-              }
-            })
-            .catch(() => setupFlatListener());
-        } else {
-          setupFlatListener();
-        }
+        unsubRtdb = onValue(ref(rtdb, rtdbPath), handleSnap, handleError);
       })
       .catch(() => {
         push("Failed to load session details.");

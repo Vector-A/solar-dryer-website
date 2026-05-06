@@ -6,7 +6,7 @@ import {
   setDoc,
   updateDoc
 } from "firebase/firestore";
-import { onValue, ref, set as rtdbSet } from "firebase/database";
+import { onValue, ref, remove as rtdbRemove, set as rtdbSet } from "firebase/database";
 import MetricCard from "../components/MetricCard";
 import HumidityPill from "../components/HumidityPill";
 import { db, rtdb } from "../firebase";
@@ -24,6 +24,7 @@ interface LiveData {
 const DEVICE_ID = "dryer-01";
 const LIVE_PATH = "Solardryer";
 const COMMAND_PATH = `devices/${DEVICE_ID}/command`;
+const SESSION_PATH = `devices/${DEVICE_ID}/session`;
 const TIMER_INTERVAL_MS = 1000;
 
 const formatElapsed = (startTimestamp: number) => {
@@ -132,6 +133,8 @@ export default function Home() {
         console.error("Failed to start session", error);
         push("Failed to start the session.");
       });
+
+      void rtdbRemove(ref(rtdb, SESSION_PATH)).catch(() => {});
 
       void rtdbSet(ref(rtdb, COMMAND_PATH), {
         action: "start",
