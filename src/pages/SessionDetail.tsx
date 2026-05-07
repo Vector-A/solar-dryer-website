@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
-import { onValue, ref } from "firebase/database";
+import { onValue, ref, get } from "firebase/database";
 import { db, rtdb } from "../firebase";
 import { downloadCsv } from "../lib/csv";
 import { formatDate } from "../lib/format";
@@ -58,12 +58,19 @@ export default function SessionDetail() {
         const data = (snap.data() as SessionData) || null;
         setSession(data);
 
-        // Read from organised sub-path if firmware supports it, otherwise read all flat readings
-        const rtdbPath = data?.readingsPath
-          ? `readings/${data.readingsPath}`
-          : "readings";
-
-        unsubRtdb = onValue(ref(rtdb, rtdbPath), handleSnap, handleError);
+        if (data?.readingsPath) {
+          // Check if firmware has written to the sub-path yet
+          get(ref(rtdb, `readings/${data.readingsPath}`)).then((subSnap) => {
+            const path = subSnap.exists()
+              ? `readings/${data.readingsPath}`
+              : "readings";
+            unsubRtdb = onValue(ref(rtdb, path), handleSnap, handleError);
+          }).catch(() => {
+            unsubRtdb = onValue(ref(rtdb, "readings"), handleSnap, handleError);
+          });
+        } else {
+          unsubRtdb = onValue(ref(rtdb, "readings"), handleSnap, handleError);
+        }
       })
       .catch(() => {
         push("Failed to load session details.");
